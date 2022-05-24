@@ -81,14 +81,13 @@ async function run() {
       res.send(result);
     })
     //made admin
-    app.put('/admin/:email', verifyToken , async (req, res) => {
+    app.put('/admin/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
-      console.log(email)
       const requester = req.decoded.email;
       const requesterAccount = await usersCollection.findOne({ email: requester })
       if (requesterAccount.role === 'admin') {
         const filter = { email: email };
-        
+
         const updateDos = {
           $set: { role: 'admin' },
         }
@@ -97,6 +96,20 @@ async function run() {
       } else {
         res.status(403).send({ messages: 'forbidden' });
       }
+    })
+    // delete user
+    app.delete('/user/delete/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const filter = { email: email };
+      const result = await usersCollection.deleteOne(filter);
+      res.send(result);
+    })
+    // admin 
+    app.get('/admin/:email', async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({ email: email });
+      const admin = user.role === 'admin';
+      res.send({ admin: admin });
     })
   } finally {
     // await client.close();
