@@ -7,6 +7,7 @@ const res = require("express/lib/response");
 const { query } = require("express");
 const port = process.env.PORT || 5000;
 const app = express();
+const stripe = require("stripe")(process.env.SECRET_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -48,6 +49,24 @@ async function run() {
     await client.connect();
     const productsCollection = client.db('max-shop').collection('products');
     const usersCollection = client.db('max-shop').collection('users');
+    const ordersCollection = client.db('max-shop').collection('orders');
+    const reviewCollection = client.db('max-shop').collection('review');
+
+
+
+    // admin verify 
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const requesterAccount = await usersCollection.findOne({ email: email });
+      if (requesterAccount.role === 'admin') {
+        next();
+      }
+      else {
+        res.status(403).send({ message: 'forbidden' });
+      }
+    }
+
+
 
     app.get('/products', async (req, res) => {
       const result = await productsCollection.find().toArray();
@@ -56,7 +75,7 @@ async function run() {
 
     // insert data
     app.post('/products', verifyToken, async (req, res) => {
-      // console.log(req.body);
+      console.log(req.body);
       const insertData = req.body;
       const result = await productsCollection.insertOne(insertData);
       res.send(result);
@@ -105,11 +124,68 @@ async function run() {
       res.send(result);
     })
     // admin 
-    app.get('/admin/:email', async (req, res) => {
+    app.get('/admin/:email',  async (req, res) => {
       const email = req.params.email;
       const user = await usersCollection.findOne({ email: email });
       const admin = user.role === 'admin';
       res.send({ admin: admin });
+    })
+    // single purchase get 
+    app.get('/purchase/:id' , async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: ObjectId(id) };
+      const result = await productsCollection.findOne(filter);
+      res.send(result);
+    })
+    // order 
+    app.post('/order/:id', async (req, res) => {
+      const id = req.params.id;
+      const orderData = req.body;
+      const result = await ordersCollection.insertOne(orderData);
+      res.send(result);
+    })
+    // get order single data
+    app.get('/order/:id', async (req, res) => {
+      const id = req.params.id;
+      const filter = { productsId: id };
+      const result = await ordersCollection.findOne(filter);
+      res.send(result);
+    })
+    // payment
+    app.post("/create-payment-intent", async (req, res) => {
+      const data = req.body;
+      // console.log(data.price);
+      // const {price} = data;
+      const price = data.price;
+      console.log(price)
+      const amount = price * 100;
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types:['card']
+      });
+      res.send({clientSecret: paymentIntent.client_secret});
+    })
+    // order 
+    app.get('/my-order/:email' ,  async(req , res)=>{
+      const email = req.params.email;
+      const query = {email:email};
+      // console.log(query);
+      const result = await ordersCollection.find(query).toArray();
+      res.send(result);
+    })
+    // Cancel order 
+    app.delete('/cancel-order-item/:id', verifyToken , async(req , res ) =>{
+      const id = req.params.id;
+      const filter = {productsId:id};
+      const result = await ordersCollection.deleteOne(filter);
+      res.send(result);
+    } )
+    // add review
+    app.post('/add-review',verifyToken , async(req , res)=>{
+      const data = req.body;
+      const result = await reviewCollection.insertOne(data);
+      res.send(result);
     })
   } finally {
     // await client.close();
