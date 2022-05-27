@@ -4,10 +4,9 @@ const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require('jsonwebtoken');
 const res = require("express/lib/response");
-const { query } = require("express");
+const stripe = require("stripe")(process.env.SECRET_KEY);
 const port = process.env.PORT || 5000;
 const app = express();
-const stripe = require("stripe")(process.env.SECRET_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -51,6 +50,7 @@ async function run() {
     const usersCollection = client.db('max-shop').collection('users');
     const ordersCollection = client.db('max-shop').collection('orders');
     const reviewCollection = client.db('max-shop').collection('review');
+    // const payCollection = client.db('max-shop').collection('pay');
 
 
 
@@ -157,7 +157,7 @@ async function run() {
       // console.log(data.price);
       // const {price} = data;
       const price = data.price;
-      console.log(price)
+      // console.log(price)
       const amount = price * 100;
       const paymentIntent = await stripe.paymentIntents.create({
         amount: amount,
@@ -185,6 +185,43 @@ async function run() {
     app.post('/add-review',verifyToken , async(req , res)=>{
       const data = req.body;
       const result = await reviewCollection.insertOne(data);
+      res.send(result);
+    })
+    // payment success
+    app.put('/payment/:id', async(req , res)=>{
+      const id = req.params.id;
+      const payment = req.body;
+      console.log(payment)
+      const filter = { _id: ObjectId(id) };
+      const updateDoc = {
+        $set:{
+          paid:true,
+          transactionId:payment.paymentIntentId
+        }
+      }
+      const result = await ordersCollection.updateOne(filter , updateDoc );
+      res.send(result)
+    })
+    // get review 
+    app.get('/review', async(req , res )=>{
+      const result = await reviewCollection.find().toArray();
+      res.send(result);
+    })
+    // manage-products
+    app.get('/manage-products' , async(req , res )=>{
+      const result = await productsCollection.find().toArray();
+      res.send(result);
+    })
+    // delete products 
+    app.delete('/manage-products/:id', verifyToken , async(req , res ) =>{
+      const id = req.params.id;
+      const filter = {_id:ObjectId(id)};
+      const result = await productsCollection.deleteOne(filter);
+      res.send(result);
+    } )
+    // manage-order
+    app.get('/manage-order', async(req , res )=>{
+      const result = await ordersCollection.find().toArray();
       res.send(result);
     })
   } finally {
